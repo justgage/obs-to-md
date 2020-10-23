@@ -15,6 +15,50 @@ defmodule ObsToMd do
       :world
 
   """
+  def convert_dir_to_dir(incoming_dir, outcoming_dir) do
+    File.mkdir(outcoming_dir)
+
+    incoming_dir
+    |> files_to_md
+    |> pmap(fn
+      {path, :binary} ->
+        Logger.warn("Copying #{path}")
+        binary_filename = path |> String.split("/") |> List.last()
+
+        File.cp!(
+          (incoming_dir <> "/" <> path) |> String.replace(" ", "\ "),
+          "./" <> outcoming_dir <> "/" <> binary_filename
+        )
+
+      {file_name, contents} ->
+        File.write!("./" <> outcoming_dir <> "/" <> file_name, contents)
+    end)
+  end
+
+  def files_to_md(dir) do
+    parse_files(dir)
+    |> Enum.flat_map(fn
+      {path, :binary} ->
+        [{path, :binary}]
+
+      {key, parsed} ->
+        md_string = parsed_to_md(parsed)
+
+        [
+          # {key <> ".html", md_string |> String.split("\n") |> Earmark.as_html!()},
+          {key,
+           """
+           ---
+           title: "#{key |> String.split(".") |> List.first() |> String.replace(~s|"|, ~s|\\"|)}"
+           ---
+
+           #{md_string}
+           """}
+        ]
+    end)
+    |> Map.new()
+  end
+
   def parse_files(dir) do
     files = find_files(dir)
 
@@ -28,20 +72,45 @@ defmodule ObsToMd do
         paths -> paths |> Enum.sort() |> List.first()
       end)
       |> pmap(fn
-        maybe_md ->
-          file_name = maybe_md |> String.split("/") |> List.last()
+        path ->
+          file_name = path |> String.split("/") |> List.last()
 
-          if String.contains?(maybe_md, ".md") do
-            Logger.info("Parsing..." <> maybe_md)
-            contents = File.read!(maybe_md)
-            {file_name, convert(contents |> IO.inspect(label: "thingy"))}
+          if String.contains?(file_name, ".md") do
+            Logger.info("Parsing..." <> path)
+            contents = File.read!(path)
+            {file_name, convert(contents)}
           else
-            {file_name, :binary}
+            {path, :binary}
           end
+      end)
+      |> Map.new()
+
+    new_files =
+      parsed
+      |> Enum.map(fn
+        {filename, :binary} ->
+          {filename, :binary}
+
+        {filename, file} ->
+          file =
+            Map.update(file, :files, [], fn sub_files ->
+              sub_files
+              |> Enum.flat_map(fn sub_file ->
+                name = "#{sub_file.file_name}.#{sub_file.extn}"
+
+                case parsed[name] do
+                  nil -> []
+                  file -> [{name, file}]
+                end
+              end)
+              |> Map.new()
+            end)
+
+          {filename, file}
       end)
 
     File.cd!(current_dir)
-    parsed |> Map.new()
+    new_files
   end
 
   def find_files(dir) do
@@ -80,13 +149,55 @@ defmodule ObsToMd do
     }
   end
 
+  def parsed_to_md(:binary) do
+    :binary
+  end
+
+  def parsed_to_md(parsed) do
+    file =
+      parsed.parts
+      |> Enum.map(fn
+        {:text, text} ->
+          text
+
+        {:tag, %{file: %{extn: extn, file_name: file_name}, title: title}} ->
+          "[#{title}](./#{file_name |> String.replace(" ", "\\ ")}.#{extn})"
+
+        {:unmatched, text} ->
+          text
+
+        {:embeded_tag, %{file: %{extn: extn, file_name: file_name}, title: title}} ->
+          case parsed.files do
+            %{} ->
+              case parsed.files["#{file_name}.#{extn}"] do
+                nil ->
+                  "![#{title}](#{file_name |> String.replace(" ", "\\ ")}.#{extn})"
+
+                sub_file ->
+                  """
+                  ---
+                  ## [#{title}](#{file_name |> String.replace(" ", "\\ ")}.#{extn}) ⤴
+                  #{parsed_to_md(sub_file)}
+                  ---
+                  """
+              end
+
+            _ ->
+              "![#{title}](#{file_name}.#{extn})"
+          end
+      end)
+      |> Enum.join()
+
+    file
+  end
+
   def markdown do
     many(choice([embeded_tag(), tag(), unmatched_tag(), between_stuff()]))
   end
 
   @spec tag_text :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def tag_text do
-    many1(none_of(char(), ~s(.|* " / \ < > : ? ] [) |> String.codepoints()))
+    many1(none_of(char(), ~s(.|*"/\<>:?][) |> String.codepoints()))
     |> map(fn list -> Enum.join(list) end)
   end
 
@@ -148,6 +259,7 @@ defmodule ObsToMd do
   end
 
   # Stuff that's not a tag!
+  @spec between_stuff :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def between_stuff do
     many1(none_of(char(), "![" |> String.codepoints()))
     |> map(fn list -> {:text, Enum.join(list)} end)
