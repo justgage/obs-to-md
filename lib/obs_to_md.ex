@@ -27,11 +27,11 @@ defmodule ObsToMd do
 
         File.cp!(
           (incoming_dir <> "/" <> path) |> String.replace(" ", "\ "),
-          "./" <> outcoming_dir <> "/" <> binary_filename
+          outcoming_dir <> "/" <> binary_filename
         )
 
       {file_name, contents} ->
-        File.write!("./" <> outcoming_dir <> "/" <> file_name, contents)
+        File.write!(outcoming_dir <> "/" <> file_name, contents)
     end)
   end
 
@@ -48,9 +48,7 @@ defmodule ObsToMd do
           # {key <> ".html", md_string |> String.split("\n") |> Earmark.as_html!()},
           {key,
            """
-           ---
-           title: "#{key |> String.split(".") |> List.first() |> String.replace(~s|"|, ~s|\\"|)}"
-           ---
+           # #{key |> String.split(".") |> List.first()}
 
            #{md_string}
            """}
@@ -161,7 +159,7 @@ defmodule ObsToMd do
           text
 
         {:tag, %{file: %{extn: extn, file_name: file_name}, title: title}} ->
-          "[#{title}](./#{file_name |> String.replace(" ", "\\ ")}.#{extn})"
+          "[#{title}](#{file_name}.#{extn})"
 
         {:unmatched, text} ->
           text
@@ -171,12 +169,12 @@ defmodule ObsToMd do
             %{} ->
               case parsed.files["#{file_name}.#{extn}"] do
                 nil ->
-                  "![#{title}](#{file_name |> String.replace(" ", "\\ ")}.#{extn})"
+                  "![#{title}](#{file_name}.#{extn})"
 
                 sub_file ->
                   """
                   ---
-                  ## [#{title}](#{file_name |> String.replace(" ", "\\ ")}.#{extn}) ⤴
+                  ## [#{title}](#{file_name}.#{extn}) ⤴
                   #{parsed_to_md(sub_file)}
                   ---
                   """
@@ -197,7 +195,7 @@ defmodule ObsToMd do
 
   @spec tag_text :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def tag_text do
-    many1(none_of(char(), ~s(.|*"/\<>:?][) |> String.codepoints()))
+    many1(none_of(char(), ~s(.|*/\<>:][) |> String.codepoints()))
     |> map(fn list -> Enum.join(list) end)
   end
 
