@@ -6,6 +6,28 @@ defmodule ObsToMd do
   Documentation for `ObsToMd`.
   """
 
+  @private_triggers [
+    "[[Day One]]",
+    "Dayone",
+    "dayone",
+    "Piano",
+    "Mayne",
+    "piano",
+    "Hoss",
+    "BJ",
+    "[[church]]",
+    "password",
+    "#private",
+    "Teamchat",
+    "Jessica",
+    "Podium",
+    "2020-",
+    "Darvil",
+    "Lindy",
+    "Koda",
+    "[[journal]]"
+  ]
+
   @doc """
   Hello world.
 
@@ -19,42 +41,100 @@ defmodule ObsToMd do
     File.mkdir(outcoming_dir)
 
     incoming_dir
-    |> files_to_md
+    |> files_to_md()
     |> pmap(fn
       {path, :binary} ->
-        Logger.warn("Copying #{path}")
         binary_filename = path |> String.split("/") |> List.last()
 
         File.cp!(
           (incoming_dir <> "/" <> path) |> String.replace(" ", "\ "),
-          outcoming_dir <> "/" <> binary_filename
+          outcoming_dir <> "/" <> escape_filename(binary_filename)
         )
 
       {file_name, contents} ->
-        File.write!(outcoming_dir <> "/" <> file_name, contents)
+        File.write!(outcoming_dir <> "/" <> escape_filename(file_name), contents)
     end)
   end
 
   def files_to_md(dir) do
-    parse_files(dir)
-    |> Enum.flat_map(fn
-      {path, :binary} ->
-        [{path, :binary}]
+    files =
+      parse_files(dir)
+      |> Enum.flat_map(fn
+        {path, :binary} ->
+          [{path, :binary}]
 
-      {key, parsed} ->
-        md_string = parsed_to_md(parsed)
+        {key, parsed} ->
+          md_string = parsed_to_md(parsed)
 
+          [
+            # {key <> ".html", md_string |> String.split("\n") |> Earmark.as_html!()},
+            {key,
+             """
+             # #{key |> String.split(".") |> List.first()}
+
+             #{md_string}
+             """}
+          ]
+      end)
+
+    files =
+      files ++
         [
-          # {key <> ".html", md_string |> String.split("\n") |> Earmark.as_html!()},
-          {key,
-           """
-           # #{key |> String.split(".") |> List.first()}
-
-           #{md_string}
-           """}
+          {"sitemap.md",
+           files
+           |> Enum.flat_map(fn {name, file_contents} ->
+             if is_binary(file_contents) &&
+                  String.contains?(
+                    file_contents,
+                    "404"
+                  ) do
+               []
+             else
+               if String.contains?(name, [".md"]) do
+                 [
+                   "- <a href=\"#!#{escape_filename(name)}\">#{name |> String.replace(".md", "")}</a>"
+                 ]
+               else
+                 []
+               end
+             end
+           end)
+           |> Enum.sort()
+           |> Enum.join("\n")}
         ]
+
+    Map.new(files)
+  end
+
+  def add_backlinks(files) do
+    backlinks =
+      files
+      |> Enum.flat_map(fn
+        {_k, file = %{}} ->
+          # Links
+          file[:files]
+
+        _ ->
+          []
+      end)
+      |> Enum.flat_map(fn
+        {file_pointed_to, file_pointing} ->
+          file_pointing.files
+          |> Enum.map(fn %{extn: extn, file_name: name} ->
+            # Flip the keys so it's pointing backward
+            {"#{name}.#{extn}", file_pointed_to}
+          end)
+      end)
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+
+    files
+    |> Enum.map(fn
+      {name, file = %{}} ->
+        {name, Map.put(file, :backlinks, (backlinks[name] || []) |> Enum.uniq())}
+
+      k ->
+        k
     end)
-    |> Map.new()
   end
 
   def parse_files(dir) do
@@ -74,16 +154,26 @@ defmodule ObsToMd do
           file_name = path |> String.split("/") |> List.last()
 
           if String.contains?(file_name, ".md") do
-            Logger.info("Parsing..." <> path)
-            contents = File.read!(path)
-            {file_name, convert(contents)}
+            contents = File.read!(Path.expand(path))
+
+            if String.contains?(file_name, @private_triggers) || (String.contains?(contents, @private_triggers) &&
+                 !String.contains?(contents, "#public")) do
+              Logger.info("File contained a Private Trigger: " <> file_name)
+              {file_name, :private}
+            else
+              {file_name, convert(contents)}
+            end
           else
             {path, :binary}
           end
       end)
+      |> Enum.filter(fn
+        {_, :private} -> false
+        _ -> true
+      end)
       |> Map.new()
 
-    new_files =
+    {new_files, stubs} =
       parsed
       |> Enum.map(fn
         {filename, :binary} ->
@@ -97,8 +187,18 @@ defmodule ObsToMd do
                 name = "#{sub_file.file_name}.#{sub_file.extn}"
 
                 case parsed[name] do
-                  nil -> []
-                  file -> [{name, file}]
+                  nil ->
+                    [
+                      {name,
+                       %{
+                         stub: true,
+                         files: [],
+                         parts: [text: "*this file hasn't been written, it's a stub*"]
+                       }}
+                    ]
+
+                  file ->
+                    [{name, file}]
                 end
               end)
               |> Map.new()
@@ -106,9 +206,24 @@ defmodule ObsToMd do
 
           {filename, file}
       end)
+      |> Enum.map(fn
+        {filename, file = %{}} ->
+          {{filename, file},
+           Enum.filter(file.files, fn
+             {_item, %{stub: true}} -> true
+             _ -> false
+           end)}
+
+        k ->
+          {k, []}
+      end)
+      |> Enum.unzip()
+
+    new_files =
+      (new_files ++ Enum.flat_map(stubs, & &1)) |> Enum.uniq_by(&escape_filename(elem(&1, 0)))
 
     File.cd!(current_dir)
-    new_files
+    new_files |> add_backlinks()
   end
 
   def find_files(dir) do
@@ -147,19 +262,26 @@ defmodule ObsToMd do
     }
   end
 
+  def escape_filename(filename) do
+    String.downcase(filename)
+    |> String.replace(" ", "-")
+    |> String.replace("(", "")
+    |> String.replace(")", "")
+  end
+
   def parsed_to_md(:binary) do
     :binary
   end
 
   def parsed_to_md(parsed) do
-    file =
+    parsed_as_markdown =
       parsed.parts
       |> Enum.map(fn
         {:text, text} ->
           text
 
         {:tag, %{file: %{extn: extn, file_name: file_name}, title: title}} ->
-          "[#{title}](#{file_name}.#{extn})"
+          "[#{title}](#{escape_filename("#{escape_filename("#{file_name}.#{extn}")}")})"
 
         {:unmatched, text} ->
           text
@@ -169,24 +291,52 @@ defmodule ObsToMd do
             %{} ->
               case parsed.files["#{file_name}.#{extn}"] do
                 nil ->
-                  "![#{title}](#{file_name}.#{extn})"
+                  "*See: [#{title} ⤴](#{escape_filename("#{file_name}.#{extn}")})*\n"
 
                 sub_file ->
                   """
+
                   ---
-                  ## [#{title}](#{file_name}.#{extn}) ⤴
+
+                  ## [#{title}](#{escape_filename("#{file_name}.#{extn}")}) ⤴
                   #{parsed_to_md(sub_file)}
+
                   ---
+
                   """
               end
 
             _ ->
-              "![#{title}](#{file_name}.#{extn})"
+              "![#{title}](#{escape_filename("#{file_name}.#{extn}")})"
           end
       end)
       |> Enum.join()
 
-    file
+    parsed_as_markdown =
+      if String.trim(parsed_as_markdown) == "" do
+        "*This file is a stub, it hasn't been written yet*"
+      else
+        parsed_as_markdown
+      end
+
+    if parsed[:backlinks] && parsed[:backlinks] != [] do
+      """
+      #{parsed_as_markdown}
+
+      ---
+      ***Backlinks***:
+
+      #{
+        parsed.backlinks
+        |> Enum.sort()
+        |> Enum.map(fn name ->
+          "- [#{name |> String.replace(".md", "")}](#{escape_filename(name)})\n"
+        end)
+      }
+      """
+    else
+      parsed_as_markdown
+    end
   end
 
   def markdown do
@@ -212,7 +362,7 @@ defmodule ObsToMd do
         ])
       ])
       |> map(fn [file_name, extn] -> %{file_name: file_name, extn: extn} end),
-      many(either(tag_text(), char(".")))
+      many1(either(tag_text(), char(".")))
       |> map(fn file_name -> %{file_name: Enum.join(file_name), extn: "md"} end)
     )
   end
