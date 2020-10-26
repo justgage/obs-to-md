@@ -143,6 +143,7 @@ defmodule ObsToMd do
     Map.new(files)
   end
 
+  @spec add_backlinks(any) :: [any]
   def add_backlinks(files) do
     backlinks =
       files
