@@ -6,6 +6,8 @@ defmodule ObsToMd do
   Documentation for `ObsToMd`.
   """
 
+  @url "http://localhost:5000/"
+
   @private_triggers [
     "[[Day One]]",
     "Dayone",
@@ -21,7 +23,6 @@ defmodule ObsToMd do
     "Teamchat",
     "Jessica",
     "Podium",
-    "2020-",
     "Darvil",
     "Lindy",
     "Koda",
@@ -37,7 +38,7 @@ defmodule ObsToMd do
       :world
 
   """
-  def convert_dir_to_dir(incoming_dir, outcoming_dir) do
+  def convert_dir_to_md(incoming_dir, outcoming_dir) do
     File.mkdir(outcoming_dir)
 
     incoming_dir
@@ -53,6 +54,42 @@ defmodule ObsToMd do
 
       {file_name, contents} ->
         File.write!(outcoming_dir <> "/" <> escape_filename(file_name), contents)
+    end)
+  end
+
+  def convert_dir_to_html(incoming_dir, outcoming_dir) do
+    File.mkdir(outcoming_dir)
+
+    incoming_dir
+    |> files_to_html()
+    |> pmap(fn
+      {path, :binary} ->
+        binary_filename = path |> String.split("/") |> List.last()
+
+        File.cp!(
+          (incoming_dir <> "/" <> path) |> String.replace(" ", "\ "),
+          outcoming_dir <>
+            "/" <> escape_filename(binary_filename)
+        )
+
+      {file_name, contents} ->
+        File.write!(
+          (outcoming_dir <> "/" <> escape_filename(file_name)) |> String.replace(".md", ".html"),
+          contents |> IO.inspect(label: "contents")
+        )
+    end)
+  end
+
+  def files_to_html(dir) do
+    dir
+    |> files_to_md()
+    |> Enum.map(fn
+      {filename, str} when is_binary(str) ->
+        {:ok, contents} = Rundown.convert(@url, str)
+        {filename, contents}
+
+      {filename, other} ->
+        {filename, other}
     end)
   end
 
@@ -92,7 +129,7 @@ defmodule ObsToMd do
              else
                if String.contains?(name, [".md"]) do
                  [
-                   "- <a href=\"#!#{escape_filename(name)}\">#{name |> String.replace(".md", "")}</a>"
+                   "- [#{name |> String.replace(".md", "")}}](#{escape_filename(name)})"
                  ]
                else
                  []
@@ -156,8 +193,9 @@ defmodule ObsToMd do
           if String.contains?(file_name, ".md") do
             contents = File.read!(Path.expand(path))
 
-            if String.contains?(file_name, @private_triggers) || (String.contains?(contents, @private_triggers) &&
-                 !String.contains?(contents, "#public")) do
+            if String.contains?(file_name, @private_triggers) ||
+                 (String.contains?(contents, @private_triggers) &&
+                    !String.contains?(contents, "#public")) do
               Logger.info("File contained a Private Trigger: " <> file_name)
               {file_name, :private}
             else
@@ -262,6 +300,7 @@ defmodule ObsToMd do
     }
   end
 
+  @spec escape_filename(binary) :: binary
   def escape_filename(filename) do
     String.downcase(filename)
     |> String.replace(" ", "-")
@@ -269,6 +308,7 @@ defmodule ObsToMd do
     |> String.replace(")", "")
   end
 
+  @spec parsed_to_md(:binary | nil | %{parts: any}) :: :binary | binary
   def parsed_to_md(:binary) do
     :binary
   end
@@ -280,8 +320,9 @@ defmodule ObsToMd do
         {:text, text} ->
           text
 
-        {:tag, %{file: %{extn: extn, file_name: file_name}, title: title}} ->
-          "[#{title}](#{escape_filename("#{escape_filename("#{file_name}.#{extn}")}")})"
+        {:tag, %{file: %{extn: _extn, file_name: file_name}, title: title}} ->
+          # "[#{title}](#{escape_filename("#{escape_filename("#{file_name}.#{extn}")}")})"
+          "[#{title}](#{escape_filename("#{escape_filename("#{file_name}")}")})"
 
         {:unmatched, text} ->
           text
@@ -291,7 +332,11 @@ defmodule ObsToMd do
             %{} ->
               case parsed.files["#{file_name}.#{extn}"] do
                 nil ->
-                  "*See: [#{title} ⤴](#{escape_filename("#{file_name}.#{extn}")})*\n"
+                  if extn == "md" do
+                    "*See: [#{title} ⤴](#{escape_filename("#{file_name}.#{extn}")})*\n"
+                  else
+                    "![#{title}](#{escape_filename("#{file_name}.#{extn}")})"
+                  end
 
                 sub_file ->
                   """
@@ -330,7 +375,8 @@ defmodule ObsToMd do
         parsed.backlinks
         |> Enum.sort()
         |> Enum.map(fn name ->
-          "- [#{name |> String.replace(".md", "")}](#{escape_filename(name)})\n"
+          file_name = name |> String.replace(".md", "")
+          "- [#{file_name}](#{escape_filename(file_name)})\n"
         end)
       }
       """
@@ -339,6 +385,7 @@ defmodule ObsToMd do
     end
   end
 
+  @spec markdown :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def markdown do
     many(choice([embeded_tag(), tag(), unmatched_tag(), between_stuff()]))
   end
@@ -349,6 +396,7 @@ defmodule ObsToMd do
     |> map(fn list -> Enum.join(list) end)
   end
 
+  @spec filename :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def filename do
     either(
       sequence([
@@ -367,6 +415,7 @@ defmodule ObsToMd do
     )
   end
 
+  @spec tag :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def tag do
     either(
       title_tag(),
@@ -374,6 +423,7 @@ defmodule ObsToMd do
     )
   end
 
+  @spec plain_tag :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def plain_tag do
     between(
       string("[["),
@@ -385,6 +435,7 @@ defmodule ObsToMd do
     )
   end
 
+  @spec title_tag :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def title_tag do
     sequence([
       string("[[") |> skip(),
@@ -398,10 +449,12 @@ defmodule ObsToMd do
     end)
   end
 
+  @spec embeded_tag :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def embeded_tag do
     pair_right(char("!"), tag()) |> map(fn {:tag, tag} -> {:embeded_tag, tag} end)
   end
 
+  @spec unmatched_tag :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def unmatched_tag do
     either(char("["), char("!")) |> map(&{:unmatched, &1})
   end
