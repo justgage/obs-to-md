@@ -6,7 +6,11 @@ defmodule ObsToMd do
   Documentation for `ObsToMd`.
   """
 
-  @url "http://localhost:5000/"
+  @url "https://justgage.github.io/"
+
+  @audio_extns ~w[mp3]
+
+  @letters ?A..?Z |> Enum.map(&to_string([&1]))
 
   @private_triggers [
     "[[Day One]]",
@@ -43,7 +47,7 @@ defmodule ObsToMd do
 
     incoming_dir
     |> files_to_md()
-    |> pmap(fn
+    |> Enum.map(fn
       {path, :binary} ->
         binary_filename = path |> String.split("/") |> List.last()
 
@@ -62,7 +66,7 @@ defmodule ObsToMd do
 
     incoming_dir
     |> files_to_html()
-    |> pmap(fn
+    |> Enum.map(fn
       {path, :binary} ->
         binary_filename = path |> String.split("/") |> List.last()
 
@@ -75,7 +79,7 @@ defmodule ObsToMd do
       {file_name, contents} ->
         File.write!(
           (outcoming_dir <> "/" <> escape_filename(file_name)) |> String.replace(".md", ".html"),
-          contents |> IO.inspect(label: "contents")
+          contents
         )
     end)
   end
@@ -83,10 +87,15 @@ defmodule ObsToMd do
   def files_to_html(dir) do
     dir
     |> files_to_md()
-    |> Enum.map(fn
+    |> pmap(fn
       {filename, str} when is_binary(str) ->
         {:ok, contents} = Rundown.convert(@url, str)
-        {filename, contents}
+
+        {filename,
+         EEx.eval_file("/Users/justgage/code/obs_to_md/lib/template.html.eex",
+           content: contents,
+           title: filename |> String.replace(".md", "")
+         )}
 
       {filename, other} ->
         {filename, other}
@@ -103,41 +112,78 @@ defmodule ObsToMd do
         {key, parsed} ->
           md_string = parsed_to_md(parsed)
 
-          [
-            # {key <> ".html", md_string |> String.split("\n") |> Earmark.as_html!()},
-            {key,
-             """
-             # #{key |> String.split(".") |> List.first()}
+          first_line = md_string |> String.split("\n") |> List.first() || ""
 
-             #{md_string}
-             """}
+          md_string =
+            if String.jaro_distance(key |> String.downcase(), first_line |> String.downcase()) >
+                 0.7 do
+              md_string
+            else
+              """
+              # #{key |> String.split(".") |> List.first()}
+
+              #{md_string}
+              """
+            end
+
+          [
+            {key, md_string}
           ]
       end)
+
+    slipbox_contents =
+      files
+      |> Enum.flat_map(fn {name, file_contents} ->
+        if is_binary(file_contents) &&
+             String.contains?(
+               file_contents,
+               "404"
+             ) do
+          []
+        else
+          if String.contains?(name, [".md"]) do
+            [
+              {name,
+               "[#{name |> String.replace(".md", "")}](#{
+                 escape_filename(name) |> String.replace(".md", "")
+               })"}
+            ]
+          else
+            []
+          end
+        end
+      end)
+      |> Enum.group_by(
+        fn {name, _} ->
+          first_letter = String.upcase(String.first(name))
+
+          if first_letter in @letters do
+            first_letter
+          else
+            "~"
+          end
+        end,
+        &elem(&1, 1)
+      )
+      |> Enum.sort()
+      |> Enum.map(fn {first_letter, values} ->
+        """
+
+        ## #{first_letter}
+        #{values |> Enum.join(" | ")}
+        """
+      end)
+      |> Enum.join("\n")
 
     files =
       files ++
         [
-          {"sitemap.md",
-           files
-           |> Enum.flat_map(fn {name, file_contents} ->
-             if is_binary(file_contents) &&
-                  String.contains?(
-                    file_contents,
-                    "404"
-                  ) do
-               []
-             else
-               if String.contains?(name, [".md"]) do
-                 [
-                   "- [#{name |> String.replace(".md", "")}}](#{escape_filename(name)})"
-                 ]
-               else
-                 []
-               end
-             end
-           end)
-           |> Enum.sort()
-           |> Enum.join("\n")}
+          {"slipbox.md",
+           """
+           # Slipbox
+
+           #{slipbox_contents}
+           """}
         ]
 
     Map.new(files)
@@ -197,7 +243,6 @@ defmodule ObsToMd do
             if String.contains?(file_name, @private_triggers) ||
                  (String.contains?(contents, @private_triggers) &&
                     !String.contains?(contents, "#public")) do
-              Logger.info("File contained a Private Trigger: " <> file_name)
               {file_name, :private}
             else
               {file_name, convert(contents)}
@@ -270,7 +315,8 @@ defmodule ObsToMd do
 
     File.cd!(dir)
 
-    {files_found_str, 0} = System.cmd("fd", ~w[-t=f -e=.md -e=.png -e=.jpg -e=.mp3 -e=.md])
+    {files_found_str, 0} =
+      System.cmd("fd", ~w[-t=f -e=.md -e=.gif -e=.png -e=.jpg -e=.mp3 -e=.md])
 
     files =
       files_found_str
@@ -291,8 +337,14 @@ defmodule ObsToMd do
 
     files =
       Enum.flat_map(parts, fn
-        {:tag, %{file: file = %{extn: _, file_name: _}, title: _}} -> [file]
-        _ -> []
+        {:embeded_tag, %{file: file = %{extn: _, file_name: _}, title: _}} ->
+          [file]
+
+        {:tag, %{file: file = %{extn: _, file_name: _}, title: _}} ->
+          [file]
+
+        _ ->
+          []
       end)
 
     %{
@@ -303,6 +355,10 @@ defmodule ObsToMd do
 
   @spec escape_filename(binary) :: binary
   def escape_filename(filename) do
+    if String.length(filename) > 255 do
+      raise "Filename too big!: " <> filename
+    end
+
     String.downcase(filename)
     |> String.replace(" ", "-")
     |> String.replace("(", "")
@@ -328,32 +384,32 @@ defmodule ObsToMd do
         {:unmatched, text} ->
           text
 
+        {:image, %{file: %{extn: extn, file_name: file_name}, title: title}} ->
+          "![#{title}](#{escape_filename("#{file_name}.#{extn}")})"
+
+        {:audio, %{file: %{extn: extn, file_name: file_name}, title: _title}} ->
+          """
+          <audio controls>
+            <source src="#{file_name}.#{extn}" type="audio/#{extn}">
+          Your browser does not support the audio element.
+          </audio>
+          """
+
         {:embeded_tag, %{file: %{extn: extn, file_name: file_name}, title: title}} ->
           case parsed.files do
             %{} ->
               case parsed.files["#{file_name}.#{extn}"] do
                 nil ->
-                  if extn == "md" do
-                    "*See: [#{title} ⤴](#{escape_filename("#{file_name}.#{extn}")})*\n"
-                  else
-                    "![#{title}](#{escape_filename("#{file_name}.#{extn}")})"
-                  end
+                  "*See: [#{title} ⤴](#{escape_filename("#{file_name}")})*\n"
 
                 sub_file ->
                   """
+                  # #{title} [🔖](#{escape_filename("#{file_name}")})
 
-                  ---
-
-                  ## [#{title}](#{escape_filename("#{file_name}.#{extn}")}) ⤴
                   #{parsed_to_md(sub_file)}
-
                   ---
-
                   """
               end
-
-            _ ->
-              "![#{title}](#{escape_filename("#{file_name}.#{extn}")})"
           end
       end)
       |> Enum.join()
@@ -402,8 +458,9 @@ defmodule ObsToMd do
     either(
       sequence([
         tag_text(),
-        char(".") |> skip(),
+        char(".") |> ignore(),
         choice([
+          string("gif"),
           string("png"),
           string("jpg"),
           string("mp3"),
@@ -439,11 +496,11 @@ defmodule ObsToMd do
   @spec title_tag :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def title_tag do
     sequence([
-      string("[[") |> skip(),
+      string("[[") |> ignore(),
       filename(),
-      char("|") |> skip(),
+      char("|") |> ignore(),
       tag_text(),
-      string("]]") |> skip()
+      string("]]") |> ignore()
     ])
     |> map(fn [filename, title] ->
       {:tag, %{file: filename, title: title}}
@@ -452,7 +509,14 @@ defmodule ObsToMd do
 
   @spec embeded_tag :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def embeded_tag do
-    pair_right(char("!"), tag()) |> map(fn {:tag, tag} -> {:embeded_tag, tag} end)
+    pair_right(char("!"), tag())
+    |> map(fn {:tag, tag = %{file: %{extn: extn}}} ->
+      cond do
+        extn == "md" -> {:embeded_tag, tag}
+        extn in @audio_extns -> {:audio, tag}
+        true -> {:image, tag}
+      end
+    end)
   end
 
   @spec unmatched_tag :: (Combine.ParserState.t() -> Combine.ParserState.t())
