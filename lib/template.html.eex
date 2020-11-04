@@ -6,11 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="style.css">
     <style>
+        body {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
         #main {
             padding-top: 2rem;
             padding-bottom: 2rem;
-            padding-left: 2rem;
-            padding-right: 2rem;
+            padding-left: 1rem;
+            padding-right: 1rem;
             margin: 0 auto;
             max-width: 40rem;
         }

@@ -105,32 +105,46 @@ defmodule ObsToMd do
   def files_to_md(dir) do
     files =
       parse_files(dir)
-      |> Enum.flat_map(fn
-        {path, :binary} ->
-          [{path, :binary}]
+      |> Enum.map(&file_to_md_with_title/1)
 
-        {key, parsed} ->
-          md_string = parsed_to_md(parsed)
+    slipbox_file = generate_slipbox_contents(files)
 
-          first_line = md_string |> String.split("\n") |> List.first() || ""
+    files =
+      files ++
+        [
+          slipbox_file
+        ]
 
-          md_string =
-            if String.jaro_distance(key |> String.downcase(), first_line |> String.downcase()) >
-                 0.7 do
-              md_string
-            else
-              """
-              # #{key |> String.split(".") |> List.first()}
+    Map.new(files)
+  end
 
-              #{md_string}
-              """
-            end
+  defp file_to_md_with_title({path, :binary}) do
+    {path, :binary}
+  end
 
-          [
-            {key, md_string}
-          ]
-      end)
+  defp file_to_md_with_title({key, parsed}) do
+    md_string = parsed_to_md(parsed)
 
+    first_line = md_string |> String.split("\n") |> List.first() || ""
+
+    md_string =
+      if String.jaro_distance(key |> String.downcase(), first_line |> String.downcase()) >
+           0.7 do
+        md_string
+      else
+        """
+        # #{key |> String.split(".") |> List.first()}
+
+        #{md_string}
+        """
+      end
+
+    {key, md_string}
+  end
+
+  # The "slipbox" in this situation is basically the index, like you
+  # would find in a book.
+  defp generate_slipbox_contents(files) do
     slipbox_contents =
       files
       |> Enum.flat_map(fn {name, file_contents} ->
@@ -175,18 +189,12 @@ defmodule ObsToMd do
       end)
       |> Enum.join("\n")
 
-    files =
-      files ++
-        [
-          {"slipbox.md",
-           """
-           # Slipbox
+    {"slipbox.md",
+     """
+     # Slipbox
 
-           #{slipbox_contents}
-           """}
-        ]
-
-    Map.new(files)
+     #{slipbox_contents}
+     """}
   end
 
   @spec add_backlinks(any) :: [any]
@@ -449,7 +457,7 @@ defmodule ObsToMd do
 
   @spec tag_text :: (Combine.ParserState.t() -> Combine.ParserState.t())
   def tag_text do
-    many1(none_of(char(), ~s(.|*/\<>:][) |> String.codepoints()))
+    many1(none_of(char(), ~s(#^.|*/\<>:][) |> String.codepoints()))
     |> map(fn list -> Enum.join(list) end)
   end
 
@@ -471,6 +479,9 @@ defmodule ObsToMd do
       many1(either(tag_text(), char(".")))
       |> map(fn file_name -> %{file_name: Enum.join(file_name), extn: "md"} end)
     )
+    |> map(fn map = %{file_name: file_name} ->
+      %{map | file_name: Regex.replace(~r/[\^#].*/, file_name, "")}
+    end)
   end
 
   @spec tag :: (Combine.ParserState.t() -> Combine.ParserState.t())
