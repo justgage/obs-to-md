@@ -345,13 +345,11 @@ defmodule ObsToMd do
 
     File.cd!(dir)
 
-    {files_found_str, 0} = System.cmd("git", ~w[ls-tree --full-tree -r --name-only HEAD])
+    files_found = FlatFiles.list_all(dir)
 
     files =
-      files_found_str
-      |> String.split("\n")
-      |> Enum.reject(&(String.trim(&1) == ""))
-      |> Enum.filter(fn path -> String.ends_with?(path, ~w[.gif .png .jpg .mp3 .md]) end)
+      files_found
+      |> Enum.filter(fn path -> String.ends_with?(path, ~w[.gif .png .jpg .jpeg .mp3 .md]) end)
       |> Enum.map(fn file_path ->
         name =
           case file_path |> String.split("/") |> List.last() |> String.split(".") do
