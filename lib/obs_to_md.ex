@@ -6,8 +6,6 @@ defmodule ObsToMd do
   Documentation for `ObsToMd`.
   """
 
-  @url "https://justgage.github.io/"
-
   @audio_extns ~w[mp3]
 
   @letters ?A..?Z |> Enum.map(&to_string([&1]))
@@ -30,7 +28,8 @@ defmodule ObsToMd do
     "Darvil",
     "Lindy",
     "Koda",
-    "[[journal]]"
+    "[[journal]]",
+    "Fudge"
   ]
 
   @doc """
@@ -61,11 +60,11 @@ defmodule ObsToMd do
     end)
   end
 
-  def convert_dir_to_html(incoming_dir, outcoming_dir) do
+  def convert_dir_to_html(incoming_dir, outcoming_dir, url, website_name) do
     File.mkdir(outcoming_dir)
 
     incoming_dir
-    |> files_to_html()
+    |> files_to_html(url, website_name)
     |> Enum.map(fn
       {path, :binary} ->
         binary_filename = path |> String.split("/") |> List.last()
@@ -84,17 +83,18 @@ defmodule ObsToMd do
     end)
   end
 
-  def files_to_html(dir) do
+  def files_to_html(dir, url, website_name) do
     dir
     |> files_to_md()
     |> pmap(fn
       {filename, str} when is_binary(str) ->
-        {:ok, contents} = Rundown.convert(@url, str)
+        {:ok, contents} = Rundown.convert(url, str)
 
         {filename,
          EEx.eval_file("/Users/justgage/code/obs_to_md/lib/template.html.eex",
            content: contents,
-           title: filename |> String.replace(".md", "")
+           title: filename |> String.replace(".md", ""),
+           website_name: website_name
          )}
 
       {filename, other} ->
@@ -169,29 +169,44 @@ defmodule ObsToMd do
       end)
       |> Enum.group_by(
         fn {name, _} ->
-          first_letter = String.upcase(String.first(name))
-
-          if first_letter in @letters do
-            first_letter
+          if String.contains?(name, "--") do
+            [category | _rest] = String.split(name, "--")
+            # The space is to make sure it shows up at the front of the list
+            " CATEGORY:" <> String.trim(category)
           else
-            "~"
+            first_letter = String.upcase(String.first(name))
+            [first_word | _rest] = String.split(name, " ")
+
+            if first_letter in @letters do
+              first_word |> String.replace(".md", "")
+            else
+              "~"
+            end
           end
         end,
         &elem(&1, 1)
       )
       |> Enum.sort()
-      |> Enum.map(fn {first_letter, values} ->
-        """
+      |> Enum.map(fn
+        {" CATEGORY:" <> category_name, values} ->
+          """
 
-        ## #{first_letter}
-        #{values |> Enum.join(" | ")}
-        """
+          **#{String.trim(category_name)}**:
+          - #{values |> Enum.join("\n -")}
+          """
+
+        {category_name, values} ->
+          """
+
+          **#{String.trim(category_name)}**: #{values |> Enum.join(",")}
+          """
       end)
       |> Enum.join("\n")
 
     {"slipbox.md",
      """
      # Slipbox
+     > This is a generated index of all the stuff in this Zettelkasten. You can kind of dig through it looking for something interesting.
 
      #{slipbox_contents}
      """}

@@ -39,8 +39,7 @@
 
 <body>
     <nav id="nav">
-        <a alt="home" href="/">🏝
-            JUSTGAGE</a>
+        <a alt="home" href="/"><%= website_name %></a>
         <div style="flex-grow: 1;"></div>
         <a alt="slipbox" href="/slipbox">🗂</a>
     </nav>
