@@ -10,28 +10,6 @@ defmodule ObsToMd do
 
   @letters ?A..?Z |> Enum.map(&to_string([&1]))
 
-  @private_triggers [
-    "[[Day One]]",
-    "Dayone",
-    "dayone",
-    "Piano",
-    "Mayne",
-    "piano",
-    "Hoss",
-    "BJ",
-    "[[church]]",
-    "password",
-    "#private",
-    "Teamchat",
-    "Jessica",
-    "Podium",
-    "Darvil",
-    "Lindy",
-    "Koda",
-    "[[journal]]",
-    "Fudge"
-  ]
-
   @doc """
   Hello world.
 
@@ -250,6 +228,28 @@ defmodule ObsToMd do
     current_dir = File.cwd!()
     File.cd!(dir)
 
+    private_triggers =
+      case File.read(Path.expand("./private-triggers.md") |> IO.inspect(label: "PRIVATE PATH")) do
+        {:ok, file_contents} ->
+          # Only take lists
+          (Enum.flat_map(String.split(file_contents, "\n"), fn
+             "- " <> trigger -> [trigger |> String.trim()]
+             _ -> []
+           end) ++ ["#private"])
+          |> IO.inspect(label: "HEREEREE")
+
+        {:error, :enoent} ->
+          Logger.warn(
+            "Could not read private triggers file, it doesn't exist, only filtering #private"
+          )
+
+          ["#private"]
+
+        {:error, error} ->
+          Logger.error("Could not read private triggers file, because of: #{error}")
+          ["#private"]
+      end
+
     parsed =
       files
       |> Enum.map(&(elem(&1, 1) |> Enum.map(fn %{path: path} -> path end)))
@@ -263,8 +263,8 @@ defmodule ObsToMd do
           if String.contains?(file_name, ".md") do
             contents = File.read!(Path.expand(path))
 
-            if String.contains?(file_name, @private_triggers) ||
-                 (String.contains?(contents, @private_triggers) &&
+            if String.contains?(file_name, private_triggers) ||
+                 (String.contains?(contents, private_triggers) &&
                     !String.contains?(contents, "#public")) do
               {file_name, :private}
             else
