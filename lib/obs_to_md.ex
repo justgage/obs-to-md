@@ -414,9 +414,8 @@ defmodule ObsToMd do
         {:text, text} ->
           text
 
-        {:tag, %{file: %{extn: _extn, file_name: file_name}, title: title}} ->
-          # "[#{title}](#{escape_filename("#{escape_filename("#{file_name}.#{extn}")}")})"
-          "[#{title}](#{escape_filename("#{escape_filename("#{file_name}")}")})"
+        {:tag, %{file: %{extn: extn, file_name: file_name}, title: title}} ->
+          "[#{title}](#{escape_filename("#{escape_filename("#{file_name}.#{extn}")}")})"
 
         {:unmatched, text} ->
           text
@@ -437,11 +436,11 @@ defmodule ObsToMd do
             %{} ->
               case parsed.files["#{file_name}.#{extn}"] do
                 nil ->
-                  "*See: [#{title} ⤴](#{escape_filename("#{file_name}")})*\n"
+                  "*See: [#{title} ⤴](#{escape_filename("#{file_name}.#{extn}")})*\n"
 
                 sub_file ->
                   """
-                  # #{title} [🔖](#{escape_filename("#{file_name}")})
+                  # #{title} [🔖](#{escape_filename("#{file_name}.#{extn}")})
 
                   #{parsed_to_md(sub_file)}
                   ---
@@ -469,7 +468,7 @@ defmodule ObsToMd do
         parsed.backlinks
         |> Enum.sort()
         |> Enum.map(fn name ->
-          file_name = name |> String.replace(".md", "")
+          file_name = name
           "- [#{file_name}](#{escape_filename(file_name)})\n"
         end)
       }
