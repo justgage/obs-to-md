@@ -111,7 +111,7 @@ defmodule ObsToMd do
         md_string
       else
         """
-        # #{key |> String.split(".") |> List.first()}
+        # #{key |> split_extn |> List.first()}
 
         #{md_string}
         """
@@ -333,8 +333,25 @@ defmodule ObsToMd do
     new_files |> add_backlinks()
   end
 
+  def split_extn(file_name) do
+    case file_name |> String.split(".") |> Enum.reverse() do
+      [extn | tail] when extn in ~w[md png jpeg jpg gif mp3 png] ->
+        [
+          tail
+          |> Enum.reverse()
+          |> IO.inspect(label: "after reveerse")
+          |> Enum.join(".")
+          |> IO.inspect(label: "after join"),
+          extn
+        ]
+
+      name ->
+        name
+    end
+  end
+
   def title_case_file_name(file_name) do
-    case file_name |> String.split(".") do
+    case file_name |> split_extn do
       [name, extn] -> Recase.to_title(name) <> "." <> extn
       name -> name |> Enum.join(".")
     end
@@ -352,7 +369,7 @@ defmodule ObsToMd do
       |> Enum.filter(fn path -> String.ends_with?(path, ~w[.gif .png .jpg .jpeg .mp3 .md]) end)
       |> Enum.map(fn file_path ->
         name =
-          case file_path |> String.split("/") |> List.last() |> String.split(".") do
+          case file_path |> String.split("/") |> List.last() |> split_extn do
             [name, extn] -> Recase.to_title(name) <> "." <> extn
             name -> name
           end
@@ -397,7 +414,7 @@ defmodule ObsToMd do
     end
 
     String.downcase(filename)
-    |> String.replace(" ", "-")
+    |> String.replace(" ", "_")
     |> String.replace("(", "")
     |> String.replace(")", "")
   end
@@ -508,7 +525,12 @@ defmodule ObsToMd do
       |> map(fn file_name -> %{file_name: Enum.join(file_name), extn: "md"} end)
     )
     |> map(fn map = %{file_name: file_name} ->
-      %{map | file_name: Regex.replace(~r/[\^#].*/, file_name, "") |> title_case_file_name}
+      %{
+        map
+        | file_name:
+            Regex.replace(~r/[\^#].*/, file_name, "")
+            |> title_case_file_name
+      }
     end)
   end
 
