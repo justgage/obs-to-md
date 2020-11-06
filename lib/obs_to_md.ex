@@ -29,7 +29,7 @@ defmodule ObsToMd do
         binary_filename = path |> String.split("/") |> List.last()
 
         File.cp!(
-          (incoming_dir <> "/" <> path) |> String.replace(" ", "\ "),
+          path |> IO.inspect(),
           outcoming_dir <> "/" <> escape_filename(binary_filename)
         )
 
@@ -48,7 +48,7 @@ defmodule ObsToMd do
         binary_filename = path |> String.split("/") |> List.last()
 
         File.cp!(
-          (incoming_dir <> "/" <> path) |> String.replace(" ", "\ "),
+          path |> String.replace(" ", "\ "),
           outcoming_dir <>
             "/" <> escape_filename(binary_filename)
         )
@@ -362,7 +362,6 @@ defmodule ObsToMd do
           path: file_path
         }
       end)
-      |> IO.inspect()
       |> Enum.group_by(& &1.name)
 
     File.cd!(current_dir)
