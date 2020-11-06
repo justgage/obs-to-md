@@ -23,7 +23,8 @@ defmodule ObsToMd.MixProject do
     [
       {:combine, "~> 0.10.0"},
       {:rundown, "~> 0.1.0"},
-      {:jason, "~> 1.2"}
+      {:jason, "~> 1.2"},
+      {:recase, "~> 0.5"}
 
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
     ]

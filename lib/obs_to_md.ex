@@ -69,7 +69,7 @@ defmodule ObsToMd do
         {:ok, contents} = Rundown.convert(url, str)
 
         {filename,
-         EEx.eval_file("/Users/justgage/code/obs_to_md/lib/template.html.eex",
+         EEx.eval_file(Path.expand("./lib/template.html.eex"),
            content: contents,
            title: filename |> String.replace(".md", ""),
            website_name: website_name
@@ -207,7 +207,7 @@ defmodule ObsToMd do
           file_pointing.files
           |> Enum.map(fn %{extn: extn, file_name: name} ->
             # Flip the keys so it's pointing backward
-            {"#{name}.#{extn}", file_pointed_to}
+            {"#{name}.#{extn}" |> title_case_file_name, file_pointed_to |> title_case_file_name}
           end)
       end)
       |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
@@ -291,7 +291,7 @@ defmodule ObsToMd do
             Map.update(file, :files, [], fn sub_files ->
               sub_files
               |> Enum.flat_map(fn sub_file ->
-                name = "#{sub_file.file_name}.#{sub_file.extn}"
+                name = "#{sub_file.file_name}.#{sub_file.extn}" |> title_case_file_name()
 
                 case parsed[name] do
                   nil ->
@@ -333,21 +333,38 @@ defmodule ObsToMd do
     new_files |> add_backlinks()
   end
 
+  def title_case_file_name(file_name) do
+    case file_name |> String.split(".") do
+      [name, extn] -> Recase.to_title(name) <> "." <> extn
+      name -> name |> Enum.join(".")
+    end
+  end
+
   def find_files(dir) do
     current_dir = File.cwd!()
 
     File.cd!(dir)
 
-    {files_found_str, 0} =
-      System.cmd("fd", ~w[-t=f -e=.md -e=.gif -e=.png -e=.jpg -e=.mp3 -e=.md])
+    {files_found_str, 0} = System.cmd("git", ~w[ls-tree --full-tree -r --name-only HEAD])
 
     files =
       files_found_str
       |> String.split("\n")
       |> Enum.reject(&(String.trim(&1) == ""))
+      |> Enum.filter(fn path -> String.ends_with?(path, ~w[.gif .png .jpg .mp3 .md]) end)
       |> Enum.map(fn file_path ->
-        %{name: file_path |> String.split("/") |> List.last(), path: file_path}
+        name =
+          case file_path |> String.split("/") |> List.last() |> String.split(".") do
+            [name, extn] -> Recase.to_title(name) <> "." <> extn
+            name -> name
+          end
+
+        %{
+          name: name,
+          path: file_path
+        }
       end)
+      |> IO.inspect()
       |> Enum.group_by(& &1.name)
 
     File.cd!(current_dir)
@@ -495,7 +512,7 @@ defmodule ObsToMd do
       |> map(fn file_name -> %{file_name: Enum.join(file_name), extn: "md"} end)
     )
     |> map(fn map = %{file_name: file_name} ->
-      %{map | file_name: Regex.replace(~r/[\^#].*/, file_name, "")}
+      %{map | file_name: Regex.replace(~r/[\^#].*/, file_name, "") |> title_case_file_name}
     end)
   end
 
