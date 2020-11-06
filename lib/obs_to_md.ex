@@ -8,7 +8,7 @@ defmodule ObsToMd do
 
   @audio_extns ~w[mp3]
 
-  @letters ?A..?Z |> Enum.map(&to_string([&1]))
+  # @letters ?A..?Z |> Enum.map(&to_string([&1]))
 
   @doc """
   Hello world.
@@ -85,13 +85,13 @@ defmodule ObsToMd do
       parse_files(dir)
       |> Enum.map(&file_to_md_with_title/1)
 
-    slipbox_file = generate_slipbox_contents(files)
+    # slipbox_file = generate_slipbox_contents(files)
 
-    files =
-      files ++
-        [
-          slipbox_file
-        ]
+    # files =
+    #   files ++
+    #     [
+    #       slipbox_file
+    #     ]
 
     Map.new(files)
   end
@@ -122,73 +122,73 @@ defmodule ObsToMd do
 
   # The "slipbox" in this situation is basically the index, like you
   # would find in a book.
-  defp generate_slipbox_contents(files) do
-    slipbox_contents =
-      files
-      |> Enum.flat_map(fn {name, file_contents} ->
-        if is_binary(file_contents) &&
-             String.contains?(
-               file_contents,
-               "404"
-             ) do
-          []
-        else
-          if String.contains?(name, [".md"]) do
-            [
-              {name,
-               "[#{name |> String.replace(".md", "")}](#{
-                 escape_filename(name) |> String.replace(".md", "")
-               })"}
-            ]
-          else
-            []
-          end
-        end
-      end)
-      |> Enum.group_by(
-        fn {name, _} ->
-          if String.contains?(name, "--") do
-            [category | _rest] = String.split(name, "--")
-            # The space is to make sure it shows up at the front of the list
-            " CATEGORY:" <> String.trim(category)
-          else
-            first_letter = String.upcase(String.first(name))
-            [first_word | _rest] = String.split(name, " ")
+  # defp generate_slipbox_contents(files) do
+  #   slipbox_contents =
+  #     files
+  #     |> Enum.flat_map(fn {name, file_contents} ->
+  #       if is_binary(file_contents) &&
+  #            String.contains?(
+  #              file_contents,
+  #              "404"
+  #            ) do
+  #         []
+  #       else
+  #         if String.contains?(name, [".md"]) do
+  #           [
+  #             {name,
+  #              "[#{name |> String.replace(".md", "")}](#{
+  #                escape_filename(name) |> String.replace(".md", "")
+  #              })"}
+  #           ]
+  #         else
+  #           []
+  #         end
+  #       end
+  #     end)
+  #     |> Enum.group_by(
+  #       fn {name, _} ->
+  #         if String.contains?(name, "--") do
+  #           [category | _rest] = String.split(name, "--")
+  #           # The space is to make sure it shows up at the front of the list
+  #           " CATEGORY:" <> String.trim(category)
+  #         else
+  #           first_letter = String.upcase(String.first(name))
+  #           [first_word | _rest] = String.split(name, " ")
 
-            if first_letter in @letters do
-              first_word |> String.replace(".md", "")
-            else
-              "~"
-            end
-          end
-        end,
-        &elem(&1, 1)
-      )
-      |> Enum.sort()
-      |> Enum.map(fn
-        {" CATEGORY:" <> category_name, values} ->
-          """
+  #           if first_letter in @letters do
+  #             first_word |> String.replace(".md", "")
+  #           else
+  #             "~"
+  #           end
+  #         end
+  #       end,
+  #       &elem(&1, 1)
+  #     )
+  #     |> Enum.sort()
+  #     |> Enum.map(fn
+  #       {" CATEGORY:" <> category_name, values} ->
+  #         """
 
-          **#{String.trim(category_name)}**:
-          - #{values |> Enum.join("\n -")}
-          """
+  #         **#{String.trim(category_name)}**:
+  #         - #{values |> Enum.join("\n -")}
+  #         """
 
-        {category_name, values} ->
-          """
+  #       {category_name, values} ->
+  #         """
 
-          **#{String.trim(category_name)}**: #{values |> Enum.join(",")}
-          """
-      end)
-      |> Enum.join("\n")
+  #         **#{String.trim(category_name)}**: #{values |> Enum.join(",")}
+  #         """
+  #     end)
+  #     |> Enum.join("\n")
 
-    {"slipbox.md",
-     """
-     # Slipbox
-     > This is a generated index of all the stuff in this Zettelkasten. You can kind of dig through it looking for something interesting.
+  #   {"slipbox.md",
+  #    """
+  #    # Slipbox
+  #    > This is a generated index of all the stuff in this Zettelkasten. You can kind of dig through it looking for something interesting.
 
-     #{slipbox_contents}
-     """}
-  end
+  #    #{slipbox_contents}
+  #    """}
+  # end
 
   @spec add_backlinks(any) :: [any]
   def add_backlinks(files) do
@@ -229,14 +229,13 @@ defmodule ObsToMd do
     File.cd!(dir)
 
     private_triggers =
-      case File.read(Path.expand("./private-triggers.md") |> IO.inspect(label: "PRIVATE PATH")) do
+      case File.read(Path.expand("./private-triggers.md")) do
         {:ok, file_contents} ->
           # Only take lists
-          (Enum.flat_map(String.split(file_contents, "\n"), fn
-             "- " <> trigger -> [trigger |> String.trim()]
-             _ -> []
-           end) ++ ["#private"])
-          |> IO.inspect(label: "HEREEREE")
+          Enum.flat_map(String.split(file_contents, "\n"), fn
+            "- " <> trigger -> [trigger |> String.trim()]
+            _ -> []
+          end) ++ ["#private"]
 
         {:error, :enoent} ->
           Logger.warn(
@@ -339,20 +338,18 @@ defmodule ObsToMd do
         [
           tail
           |> Enum.reverse()
-          |> IO.inspect(label: "after reveerse")
-          |> Enum.join(".")
-          |> IO.inspect(label: "after join"),
+          |> Enum.join("."),
           extn
         ]
 
       name ->
-        name
+        name |> Enum.reverse()
     end
   end
 
   def title_case_file_name(file_name) do
     case file_name |> split_extn do
-      [name, extn] -> Recase.to_title(name) <> "." <> extn
+      [name, extn] -> name <> "." <> extn
       name -> name |> Enum.join(".")
     end
   end
@@ -362,7 +359,7 @@ defmodule ObsToMd do
 
     File.cd!(dir)
 
-    files_found = FlatFiles.list_all(dir)
+    files_found = FlatFiles.list_all(dir) |> IO.inspect(label: "FLAT FILES")
 
     files =
       files_found
@@ -370,7 +367,7 @@ defmodule ObsToMd do
       |> Enum.map(fn file_path ->
         name =
           case file_path |> String.split("/") |> List.last() |> split_extn do
-            [name, extn] -> Recase.to_title(name) <> "." <> extn
+            [name, extn] -> name <> "." <> extn
             name -> name
           end
 
@@ -484,9 +481,8 @@ defmodule ObsToMd do
       #{
         parsed.backlinks
         |> Enum.sort()
-        |> Enum.map(fn name ->
-          file_name = name
-          "- [#{file_name}](#{escape_filename(file_name)})\n"
+        |> Enum.map(fn file_name ->
+          "- [#{file_name |> split_extn() |> List.first()}](#{escape_filename(file_name)})\n"
         end)
       }
       """
