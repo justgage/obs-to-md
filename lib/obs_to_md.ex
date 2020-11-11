@@ -53,6 +53,9 @@ defmodule ObsToMd do
             "/" <> escape_filename(binary_filename)
         )
 
+      {"index.md", contents} ->
+        File.write!(outcoming_dir <> "/index.html", contents)
+
       {file_name, contents} ->
         File.write!(
           (outcoming_dir <> "/" <> escape_filename(file_name))
