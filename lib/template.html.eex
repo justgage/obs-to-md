@@ -41,7 +41,7 @@
     <nav id="nav">
         <a alt="home" href="/"><%= website_name %></a>
         <div style="flex-grow: 1;"></div>
-        <a alt="slipbox" href="/slipbox">🗂</a>
+        <a alt="slipbox" href="/slipbox.md">🗂</a>
     </nav>
     <div id="main">
         <%= content %>
