@@ -5,8 +5,7 @@ defmodule Mix.Tasks.DirToHtml do
   def run([from_dir, to_dir, url, website_title]) do
     {:ok, _} = Application.ensure_all_started(:obs_to_md)
     ObsToMd.convert_dir_to_html(Path.expand(from_dir), Path.expand(to_dir), url, website_title)
-    Logger.info("DIRECTORY CONVETED SUCCESSFULLY!")
-    Process.sleep(100)
+    Logger.info("✅ DIRECTORY CONVERTED SUCCESSFULLY! (ignore errors below) \n\n")
     :ok
   end
 
