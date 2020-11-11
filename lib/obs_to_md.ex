@@ -168,19 +168,36 @@ defmodule ObsToMd do
         end,
         &elem(&1, 1)
       )
+      |> Enum.group_by(
+        # Now any groups that have only ONE subpage we roll up into the first letter category
+        fn
+          {key, [_single_value]} ->
+            key |> String.trim() |> String.first() |> String.upcase() |> IO.inspect(label: "ADF")
+
+          {key, _values} ->
+            key
+        end,
+        &elem(&1, 1)
+      )
+      |> Enum.map(fn {category, pages} ->
+        # The previous group_by left these as lists of lists, this will flatten them
+        # Back down
+        pages_flattened = pages |> Enum.flat_map(fn x -> x end) |> Enum.sort()
+        {category, pages_flattened}
+      end)
       |> Enum.sort()
       |> Enum.map(fn
         {" CATEGORY:" <> category_name, values} ->
           """
 
           **#{String.trim(category_name)}**:
-          - #{values |> Enum.join("\n -")}
+          - #{values |> Enum.join("\n - ")}
           """
 
         {category_name, values} ->
           """
 
-          **#{String.trim(category_name)}**: #{values |> Enum.join(",")}
+          **#{String.trim(category_name)}**: #{values |> Enum.join(" / ")}
           """
       end)
       |> Enum.join("\n")
@@ -188,7 +205,8 @@ defmodule ObsToMd do
     {"slipbox.md",
      """
      # Slipbox
-     > This is a generated index of all the stuff in this Zettelkasten. You can kind of dig through it looking for something interesting.
+     > This is a generated index of all **#{length(files)}** notes in this Zettelkasten.
+     > You can kind of dig through it looking for something interesting.
 
      #{slipbox_contents}
      """}
