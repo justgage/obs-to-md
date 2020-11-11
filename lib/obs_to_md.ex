@@ -29,7 +29,7 @@ defmodule ObsToMd do
         binary_filename = path |> String.split("/") |> List.last()
 
         File.cp!(
-          path |> IO.inspect(),
+          path,
           outcoming_dir <> "/" <> escape_filename(binary_filename)
         )
 
@@ -139,10 +139,7 @@ defmodule ObsToMd do
         else
           if String.contains?(name, [".md"]) do
             [
-              {name,
-               "[#{name |> String.replace(".md", "")}](#{
-                 escape_filename(name) |> String.replace(".md", "")
-               })"}
+              {name, "[#{name |> String.replace(".md", "")}](#{escape_filename(name)})"}
             ]
           else
             []
@@ -172,7 +169,7 @@ defmodule ObsToMd do
         # Now any groups that have only ONE subpage we roll up into the first letter category
         fn
           {key, [_single_value]} ->
-            key |> String.trim() |> String.first() |> String.upcase() |> IO.inspect(label: "ADF")
+            key |> String.trim() |> String.first() |> String.upcase()
 
           {key, _values} ->
             key
@@ -381,7 +378,7 @@ defmodule ObsToMd do
 
     File.cd!(dir)
 
-    files_found = FlatFiles.list_all(dir) |> IO.inspect(label: "FLAT FILES")
+    files_found = FlatFiles.list_all(dir)
 
     files =
       files_found
