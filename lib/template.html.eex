@@ -39,9 +39,9 @@
 
 <body>
     <nav id="nav">
-        <a alt="home" href="/"><%= website_name %></a>
+        <a alt="home" href="<%= base_url %>"><%= website_name %></a>
         <div style="flex-grow: 1;"></div>
-        <a alt="slipbox" href="/slipbox.md">🗂</a>
+        <a alt="slipbox" href="<%= base_url %>slipbox.md">🗂</a>
     </nav>
     <div id="main">
         <%= content %>

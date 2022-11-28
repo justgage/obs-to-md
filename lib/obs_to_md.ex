@@ -76,7 +76,8 @@ defmodule ObsToMd do
          EEx.eval_file(Path.expand("./lib/template.html.eex"),
            content: contents,
            title: filename |> String.replace(".md", ""),
-           website_name: website_name
+           website_name: website_name,
+           base_url: url
          )}
 
       {filename, other} ->
