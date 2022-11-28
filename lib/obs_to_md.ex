@@ -433,6 +433,8 @@ defmodule ObsToMd do
     |> String.replace(" ", "_")
     |> String.replace("(", "")
     |> String.replace(")", "")
+    |> String.replace("\"", "")
+    |> String.trim()
   end
 
   @spec parsed_to_md(:binary | nil | %{parts: any}) :: :binary | binary
